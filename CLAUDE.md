@@ -7,7 +7,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 This repository contains infrastructure for monitoring Docker containers and web services using Uptime Kuma:
 
 1. **Docker + WireGuard Setup** (`docker/`) - Multi-host Docker monitoring via WireGuard VPN
-2. **Auto-Monitor Tool** (`docker/auto-monitor/`) - Python script to automatically sync Traefik routes with Uptime Kuma monitors
+2. **Auto-Monitor Tool** (`docker/auto-monitor/`) - Python script to automatically sync Traefik routes and Docker containers with Uptime Kuma monitors
+3. **Configuration Scripts** - Automated scripts to generate WireGuard configurations for server and clients
 
 ## Architecture
 
@@ -37,7 +38,61 @@ Located in `docker/auto-monitor/`, this Python tool:
 
 The tool is idempotent and includes automatic session recovery on timeout.
 
+## Project Structure
+
+```
+.
+├── README.md                      # Main project documentation
+├── CLAUDE.md                      # This file
+├── init_server_config.sh          # Initialize WireGuard server config and keys
+├── generate_host_config.sh        # Generate client configs for new hosts
+├── configs/                       # WireGuard configurations
+│   ├── wg0.conf                  # Server WireGuard config
+│   ├── server/                   # Server keys directory
+│   │   ├── server_private.key
+│   │   └── server_public.key
+│   ├── hal-wg/                   # hal client configuration
+│   │   ├── wg0.conf
+│   │   ├── docker-compose.yml
+│   │   ├── hal_private.key
+│   │   └── hal_public.key
+│   ├── plague-wg/                # plague client configuration
+│   └── blade-wg/                 # blade client configuration
+└── docker/                       # Main server deployment
+    ├── docker-compose.yml        # Main services: uptime-kuma, wireguard, auto-monitor
+    ├── README.md                 # Docker deployment documentation
+    └── auto-monitor/             # Auto-sync tool
+        ├── README.md             # Detailed auto-monitor docs
+        ├── sync_monitors.py      # Main sync script
+        ├── pyproject.toml        # Python dependencies (uv)
+        ├── .env.example          # Configuration template
+        └── uv.lock               # uv lock file
+```
+
 ## Common Commands
+
+### Configuration Scripts
+
+**Initialize server (first-time setup):**
+```bash
+# Generate server WireGuard keys and initial config
+./init_server_config.sh
+```
+
+**Add a new remote host:**
+```bash
+# Generate client config for a new host
+./generate_host_config.sh <hostname> <ip_address>
+
+# Example:
+./generate_host_config.sh hal 10.200.200.2
+
+# Then restart the WireGuard server
+cd docker && docker-compose restart wireguard-kuma
+
+# Copy configs/hal-wg to the remote host and deploy
+# On remote host: cd hal-wg && docker-compose up -d
+```
 
 ### Auto-Monitor Tool
 
@@ -93,11 +148,16 @@ cd docker
 docker-compose up -d
 
 # Remote hosts (deploy each to respective server)
-cd docker/hal-wg    # or plague-wg, blade-wg
+cd configs/hal-wg    # or plague-wg, blade-wg
 docker-compose up -d
 ```
 
-Before deploying, generate WireGuard keys and update configuration files (see `docker/README.md` for details).
+**First-time setup:**
+1. Run `./init_server_config.sh` to initialize server
+2. Run `./generate_host_config.sh <hostname> <ip>` for each remote host
+3. Deploy main server: `cd docker && docker-compose up -d`
+4. Copy client configs to remote hosts and deploy
+5. Configure Docker hosts in Uptime Kuma UI (Settings → Docker Hosts)
 
 ### WireGuard Management
 
@@ -120,6 +180,26 @@ curl http://10.200.200.4:2375/containers/json
 ```
 
 ## Development Notes
+
+### Configuration Scripts
+
+**`init_server_config.sh`**
+- Creates `configs/server/` directory if it doesn't exist
+- Generates WireGuard server keys (private and public)
+- Creates initial `configs/wg0.conf` with server interface configuration
+- Idempotent - won't regenerate if keys/config already exist
+- Server keys are stored in `configs/server/server_private.key` and `server_public.key`
+
+**`generate_host_config.sh <hostname> <ip>`**
+- Takes hostname and IP address (must be 10.200.200.X) as arguments
+- Generates WireGuard client keys for the host
+- Creates `configs/<hostname>-wg/` directory with:
+  - `wg0.conf` - WireGuard client configuration
+  - `docker-compose.yml` - Docker services (wireguard-client + docker-proxy)
+  - `<hostname>_private.key` and `<hostname>_public.key` - Client keys
+- Automatically appends peer configuration to server's `configs/wg0.conf`
+- Prompts for server endpoint (e.g., `uptime.example.com:51820`)
+- Provides next-step deployment instructions
 
 ### Auto-Monitor Tool
 
