@@ -1,0 +1,15 @@
+[project]
+name = "uptime-sync"
+version = "0.1.0"
+description = "Sync Traefik host rules with Uptime Kuma monitors"
+requires-python = ">=3.8"
+dependencies = [
+    "requests>=2.31.0",
+    "python-socketio>=5.10.0",
+    "websocket-client>=1.6.0",
+    "python-dotenv>=1.0.0",
+    "uptime-kuma-api>=1.2.1",
+]
+
+[project.scripts]
+sync-monitors = "sync_monitors:main"

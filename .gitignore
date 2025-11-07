@@ -1,0 +1,37 @@
+# WireGuard secrets and keys
+*.key
+wg0.conf
+
+# Host-specific configurations (generated configs)
+configs/hal-wg/
+configs/plague-wg/
+configs/blade-wg/
+configs/server/
+configs/wg0.conf
+configs/*-wg/
+
+# Environment variables
+.env
+
+# Python virtual environment
+.venv/
+venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.egg-info/
+
+# Docker
+docker-compose.override.yml
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db

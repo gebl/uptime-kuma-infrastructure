@@ -1,0 +1,87 @@
+version: '3.8'
+
+services:
+  wireguard-kuma:
+    image: linuxserver/wireguard:latest
+    container_name: wireguard-kuma
+    restart: unless-stopped
+    cap_add:
+      - NET_ADMIN
+      - SYS_MODULE
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - TZ=America/Chicago
+    volumes:
+      - ../configs/wg0.conf:/config/wg_confs/wg0.conf
+      - /lib/modules:/lib/modules
+    sysctls:
+      - net.ipv4.conf.all.src_valid_mark=1
+    network_mode: "service:uptime-kuma"
+
+  docker-proxy-local:
+    image: tecnativa/docker-socket-proxy:latest
+    container_name: docker-proxy-local
+    restart: unless-stopped
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    environment:
+      - CONTAINERS=1
+      - SERVICES=1
+      - TASKS=1
+      - NETWORKS=1
+      - NODES=1
+      - INFO=1
+      - IMAGES=1
+      - VOLUMES=1
+    networks:
+      - docker-proxy
+
+  uptime-kuma:
+    image: louislam/uptime-kuma:latest
+    container_name: uptime-kuma
+    restart: unless-stopped
+    volumes:
+      - /antelope/docker/uptime-kuma-data:/app/data
+    ports:
+      - "3001:3001"      # Uptime Kuma web interface
+      - "51820:51820/udp"  # WireGuard
+    environment:
+      # Configure additional Docker hosts in Uptime Kuma UI:
+      # local:    tcp://docker-proxy-local:2375
+      # hal-wg:   tcp://10.200.200.2:2375
+      # plague-wg: tcp://10.200.200.3:2375
+      # blade-wg:  tcp://10.200.200.4:2375
+      - DOCKER_HOST=tcp://10.200.200.2:2375
+    networks:
+      - default
+      - docker-proxy
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.uptime-kuma.rule=Host(`uptime.tehgibson.landq.net`)"
+      - "traefik.http.routers.uptime-kuma.entrypoints=https"
+      - "traefik.http.routers.uptime-kuma.tls=true"
+      - "traefik.http.services.uptime-kuma.loadbalancer.server.port=3001"
+      - "traefik.docker.network=docker_default"
+
+  auto-monitor:
+    image: python:3.12-slim
+    container_name: auto-monitor
+    restart: unless-stopped
+    working_dir: /app
+    volumes:
+      - ./auto-monitor:/app
+    environment:
+      - TZ=America/Chicago
+    command: >
+      sh -c "apt-get update && apt-get install -y curl &&
+             curl -LsSf https://astral.sh/uv/install.sh | sh &&
+             export PATH='/root/.cargo/bin:$PATH' &&
+             tail -f /dev/null"
+    network_mode: "service:uptime-kuma"
+    depends_on:
+      - uptime-kuma
+
+networks:
+  docker-proxy:
+    driver: bridge
